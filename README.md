@@ -135,6 +135,12 @@ dotnet run --project .\src\Riftbound.PriceUpdater\Riftbound.PriceUpdater.csproj
 
 The app logs rows scanned, eligible, skipped, updated, failed, product names, row numbers, product IDs, old prices, new prices, errors, and total execution time.
 
+To test only the TCGPlayer scraper without reading or updating Google Sheets:
+
+```powershell
+dotnet run --project .\src\Riftbound.PriceUpdater\Riftbound.PriceUpdater.csproj -- --scrape-url "https://www.tcgplayer.com/product/661934/Riftbound%20League%20of%20Legends%20Trading%20Card%20Game-Spiritforged-Spiritforged%20Booster%20Display?Language=English"
+```
+
 ## Schedule With Windows Task Scheduler
 
 1. Build the app:

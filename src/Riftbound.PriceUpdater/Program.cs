@@ -37,6 +37,33 @@ try
     var scraper = host.Services.GetRequiredService<TcgPlayerPriceScraper>();
     try
     {
+        var scrapeUrls = GetArgumentValues(args, "--scrape-url");
+        if (scrapeUrls.Count > 0)
+        {
+            Environment.ExitCode = 0;
+            foreach (var scrapeUrl in scrapeUrls)
+            {
+                var result = await scraper.ScrapeMarketPriceAsync(scrapeUrl, CancellationToken.None);
+                if (result.Success)
+                {
+                    Log.Information(
+                        "Scraped TCGPlayer Market Price: ${MarketPrice:0.00} from {FinalUrl}",
+                        result.MarketPrice,
+                        result.FinalUrl);
+                }
+                else
+                {
+                    Log.Error(
+                        "Failed to scrape TCGPlayer Market Price from {FinalUrl}. Error: {ErrorMessage}",
+                        result.FinalUrl,
+                        result.ErrorMessage);
+                    Environment.ExitCode = 1;
+                }
+            }
+
+            return;
+        }
+
         var runner = host.Services.GetRequiredService<PriceUpdateRunner>();
         Environment.ExitCode = await runner.RunAsync(CancellationToken.None);
     }
@@ -53,4 +80,18 @@ catch (Exception ex)
 finally
 {
     await Log.CloseAndFlushAsync();
+}
+
+static IReadOnlyList<string> GetArgumentValues(string[] args, string name)
+{
+    var values = new List<string>();
+    for (var i = 0; i < args.Length; i++)
+    {
+        if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+        {
+            values.Add(args[i + 1]);
+        }
+    }
+
+    return values;
 }
