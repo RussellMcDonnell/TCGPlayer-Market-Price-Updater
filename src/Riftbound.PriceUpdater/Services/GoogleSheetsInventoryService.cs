@@ -51,30 +51,35 @@ public sealed class GoogleSheetsInventoryService
             _pricingOptions.MarketPriceColumn);
 
         var range = ToSheetRange(_pricingOptions.FirstDataRow, lastColumn);
-        var request = _sheetsService.Value.Spreadsheets.Values.Get(_googleOptions.SpreadsheetId, range);
-        request.ValueRenderOption = SpreadsheetsResource.ValuesResource.GetRequest.ValueRenderOptionEnum.FORMULA;
+        var request = _sheetsService.Value.Spreadsheets.Get(_googleOptions.SpreadsheetId);
+        request.IncludeGridData = true;
+        request.Ranges = new Google.Apis.Util.Repeatable<string>([range]);
 
         var response = await request.ExecuteAsync(cancellationToken);
-        var values = response.Values ?? [];
-        var rows = new List<InventoryProductRow>(values.Count);
+        var rowData = response.Sheets?
+            .SelectMany(sheet => sheet.Data ?? [])
+            .SelectMany(data => data.RowData ?? [])
+            .ToList() ?? [];
+        var rows = new List<InventoryProductRow>(rowData.Count);
 
         var productIndex = ColumnToIndex(_pricingOptions.ProductNameColumn);
         var quantityIndex = ColumnToIndex(_pricingOptions.InventoryQuantityColumn);
         var marketPriceIndex = ColumnToIndex(_pricingOptions.MarketPriceColumn);
 
-        for (var i = 0; i < values.Count; i++)
+        for (var i = 0; i < rowData.Count; i++)
         {
             var sheetRowNumber = _pricingOptions.FirstDataRow + i;
-            var row = values[i];
-            var productName = GetCell(row, productIndex)?.Trim() ?? "";
-            var quantity = ParseDecimal(GetCell(row, quantityIndex));
-            var marketPriceFormulaOrValue = GetCell(row, marketPriceIndex);
-            var tcgPlayerUrl = ExtractTcgPlayerUrl(marketPriceFormulaOrValue);
+            var cells = rowData[i].Values ?? [];
+            var marketPriceCell = GetCell(cells, marketPriceIndex);
+            var marketPriceFormulaOrValue = GetCellFormulaOrDisplayValue(marketPriceCell);
+            var cellHyperlink = GetCellTcgPlayerHyperlink(marketPriceCell);
+            var formulaOrRawUrl = ExtractTcgPlayerUrl(marketPriceFormulaOrValue);
+            var tcgPlayerUrl = cellHyperlink ?? formulaOrRawUrl;
 
             rows.Add(new InventoryProductRow(
                 sheetRowNumber,
-                productName,
-                quantity,
+                GetCellFormulaOrDisplayValue(GetCell(cells, productIndex))?.Trim() ?? "",
+                ParseDecimal(GetCellFormulaOrDisplayValue(GetCell(cells, quantityIndex))),
                 marketPriceFormulaOrValue,
                 tcgPlayerUrl));
         }
@@ -243,9 +248,75 @@ public sealed class GoogleSheetsInventoryService
         return $"{column.ToUpperInvariant()}{rowNumber}";
     }
 
-    private static string? GetCell(IList<object> row, int zeroBasedColumnIndex)
+    private static CellData? GetCell(IList<CellData> row, int zeroBasedColumnIndex)
     {
-        return zeroBasedColumnIndex < row.Count ? row[zeroBasedColumnIndex]?.ToString() : null;
+        return zeroBasedColumnIndex < row.Count ? row[zeroBasedColumnIndex] : null;
+    }
+
+    private static string? GetCellFormulaOrDisplayValue(CellData? cell)
+    {
+        if (cell is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.UserEnteredValue?.FormulaValue))
+        {
+            return cell.UserEnteredValue.FormulaValue;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.FormattedValue))
+        {
+            return cell.FormattedValue;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.UserEnteredValue?.StringValue))
+        {
+            return cell.UserEnteredValue.StringValue;
+        }
+
+        if (cell.UserEnteredValue?.NumberValue is not null)
+        {
+            return cell.UserEnteredValue.NumberValue.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (cell.EffectiveValue?.NumberValue is not null)
+        {
+            return cell.EffectiveValue.NumberValue.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.EffectiveValue?.StringValue))
+        {
+            return cell.EffectiveValue.StringValue;
+        }
+
+        return null;
+    }
+
+    private static string? GetCellTcgPlayerHyperlink(CellData? cell)
+    {
+        if (cell is null)
+        {
+            return null;
+        }
+
+        var candidateLinks = new List<string?>();
+
+        candidateLinks.Add(cell.Hyperlink);
+        candidateLinks.AddRange(cell.TextFormatRuns?
+            .Select(run => run.Format?.Link?.Uri) ?? []);
+        candidateLinks.Add(cell.UserEnteredFormat?.TextFormat?.Link?.Uri);
+
+        foreach (var candidateLink in candidateLinks)
+        {
+            var tcgPlayerUrl = ExtractTcgPlayerUrl(candidateLink);
+            if (!string.IsNullOrWhiteSpace(tcgPlayerUrl))
+            {
+                return tcgPlayerUrl;
+            }
+        }
+
+        return null;
     }
 
     private static int ColumnToIndex(string columnName)

@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Riftbound.PriceUpdater",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build Riftbound.PriceUpdater",
+      "program": "${workspaceFolder}/src/Riftbound.PriceUpdater/bin/Debug/net9.0/Riftbound.PriceUpdater.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/Riftbound.PriceUpdater",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": true,
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  ]
+}
