@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Riftbound.PriceUpdater.Models;
 using Riftbound.PriceUpdater.Options;
 using Riftbound.PriceUpdater.Services;
 using Serilog;
@@ -37,6 +38,42 @@ try
     var scraper = host.Services.GetRequiredService<TcgPlayerPriceScraper>();
     try
     {
+        if (args.Any(arg => string.Equals(arg, "--inspect-sheet", StringComparison.OrdinalIgnoreCase)))
+        {
+            var inventoryService = host.Services.GetRequiredService<GoogleSheetsInventoryService>();
+            var pricingOptions = host.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<InventoryPricingOptions>>().Value;
+            var rows = await inventoryService.ReadInventoryRowsAsync(CancellationToken.None);
+            var rowsWithLinks = rows.Where(row => !string.IsNullOrWhiteSpace(row.TcgPlayerUrl)).ToList();
+            var rowsWithPositiveQuantity = rows.Where(row => row.ProductQuantity.GetValueOrDefault() > 0).ToList();
+            var eligibleRows = rowsWithLinks
+                .Where(row => pricingOptions.UpdateAllProducts || row.ProductQuantity.GetValueOrDefault() > 0)
+                .ToList();
+
+            Log.Information("Inspect Sheet: total rows read: {TotalRows}", rows.Count);
+            Log.Information("Inspect Sheet: rows with TCGPlayer links in market price column: {RowsWithLinks}", rowsWithLinks.Count);
+            Log.Information("Inspect Sheet: rows with Product Qty > 0: {RowsWithPositiveQuantity}", rowsWithPositiveQuantity.Count);
+            Log.Information("Inspect Sheet: rows eligible under current config: {EligibleRows}", eligibleRows.Count);
+            Log.Information("Inspect Sheet: UpdateAllProducts: {UpdateAllProducts}", pricingOptions.UpdateAllProducts);
+
+            foreach (var row in rows.Take(40))
+            {
+                var productId = GoogleSheetsInventoryService.ExtractTcgPlayerProductId(row.TcgPlayerUrl);
+                var skipReason = GetSkipReason(row, pricingOptions);
+                Log.Information(
+                    "Inspect Row {RowNumber}: Qty={Quantity}, HasLink={HasLink}, ProductId={ProductId}, SkipReason={SkipReason}, Product='{ProductName}', MarketCell='{MarketCell}'",
+                    row.RowNumber,
+                    row.ProductQuantity,
+                    !string.IsNullOrWhiteSpace(row.TcgPlayerUrl),
+                    productId,
+                    skipReason,
+                    row.ProductName,
+                    Truncate(row.ExistingMarketPriceFormulaOrValue, 140));
+            }
+
+            Environment.ExitCode = 0;
+            return;
+        }
+
         var scrapeUrls = GetArgumentValues(args, "--scrape-url");
         if (scrapeUrls.Count > 0)
         {
@@ -94,4 +131,29 @@ static IReadOnlyList<string> GetArgumentValues(string[] args, string name)
     }
 
     return values;
+}
+
+static string GetSkipReason(InventoryProductRow row, InventoryPricingOptions options)
+{
+    if (string.IsNullOrWhiteSpace(row.TcgPlayerUrl))
+    {
+        return "No TCGPlayer link found in market price column";
+    }
+
+    if (!options.UpdateAllProducts && row.ProductQuantity.GetValueOrDefault() <= 0)
+    {
+        return "Product Qty is not greater than 0";
+    }
+
+    return "Eligible";
+}
+
+static string? Truncate(string? value, int maxLength)
+{
+    if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+    {
+        return value;
+    }
+
+    return value[..maxLength] + "...";
 }

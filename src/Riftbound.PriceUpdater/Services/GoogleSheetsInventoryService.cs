@@ -78,8 +78,8 @@ public sealed class GoogleSheetsInventoryService
 
             rows.Add(new InventoryProductRow(
                 sheetRowNumber,
-                GetCellFormulaOrDisplayValue(GetCell(cells, productIndex))?.Trim() ?? "",
-                ParseDecimal(GetCellFormulaOrDisplayValue(GetCell(cells, quantityIndex))),
+                GetCellDisplayValue(GetCell(cells, productIndex))?.Trim() ?? "",
+                ParseDecimal(GetCellDisplayValue(GetCell(cells, quantityIndex))),
                 marketPriceFormulaOrValue,
                 tcgPlayerUrl));
         }
@@ -291,6 +291,41 @@ public sealed class GoogleSheetsInventoryService
         }
 
         return null;
+    }
+
+    private static string? GetCellDisplayValue(CellData? cell)
+    {
+        if (cell is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.FormattedValue))
+        {
+            return cell.FormattedValue;
+        }
+
+        if (cell.EffectiveValue?.NumberValue is not null)
+        {
+            return cell.EffectiveValue.NumberValue.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.EffectiveValue?.StringValue))
+        {
+            return cell.EffectiveValue.StringValue;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cell.UserEnteredValue?.StringValue))
+        {
+            return cell.UserEnteredValue.StringValue;
+        }
+
+        if (cell.UserEnteredValue?.NumberValue is not null)
+        {
+            return cell.UserEnteredValue.NumberValue.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return cell.UserEnteredValue?.FormulaValue;
     }
 
     private static string? GetCellTcgPlayerHyperlink(CellData? cell)

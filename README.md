@@ -141,6 +141,12 @@ To test only the TCGPlayer scraper without reading or updating Google Sheets:
 dotnet run --project .\src\Riftbound.PriceUpdater\Riftbound.PriceUpdater.csproj -- --scrape-url "https://www.tcgplayer.com/product/661934/Riftbound%20League%20of%20Legends%20Trading%20Card%20Game-Spiritforged-Spiritforged%20Booster%20Display?Language=English"
 ```
 
+To inspect which Google Sheet rows will be eligible without scraping TCGPlayer or updating the sheet:
+
+```powershell
+dotnet run --project .\src\Riftbound.PriceUpdater\Riftbound.PriceUpdater.csproj -- --inspect-sheet
+```
+
 ## Schedule With Windows Task Scheduler
 
 1. Build the app:
