@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+.vs/
+.idea/
+*.user
+*.suo
+
+src/Riftbound.PriceUpdater/service-account.json
+src/Riftbound.PriceUpdater/appsettings.local.json
